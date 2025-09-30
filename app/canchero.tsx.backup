@@ -1,0 +1,874 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Alert, 
+  ScrollView, 
+  TouchableOpacity, 
+  Modal, 
+  TextInput,
+  FlatList,
+  Switch,
+  ActivityIndicator
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
+import { Ionicons } from '@expo/vector-icons';
+import { Timestamp } from 'firebase/firestore';
+import app from '../src/firebase';
+import { usePartidosCanchero } from '../src/hooks/useMatches';
+import { MatchService } from '../src/services/MatchService';
+import { Match } from '../src/types/Match';
+
+const auth = getAuth(app);
+
+// Tipos de datos
+interface Cancha {
+  id: string;
+  nombre: string;
+  establecimiento: string;
+  disponible: boolean;
+}
+
+// Componente FormModal separado para evitar re-renders
+interface FormModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onSubmit: () => void;
+  title: string;
+  formData: any;
+  setFormData: (updater: (prev: any) => any) => void;
+  canchas: Cancha[];
+}
+
+const FormModal = React.memo(({ visible, onClose, onSubmit, title, formData, setFormData, canchas }: FormModalProps) => (
+  <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+    <View style={styles.modalContainer}>
+      <View style={styles.modalHeader}>
+        <TouchableOpacity onPress={onClose}>
+          <Text style={styles.cancelButton}>Cancelar</Text>
+        </TouchableOpacity>
+        <Text style={styles.modalTitle}>{title}</Text>
+        <TouchableOpacity onPress={() => {
+          console.log('🔘 Botón Guardar presionado');
+          onSubmit();
+        }}>
+          <Text style={styles.saveButton}>Guardar</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.formContainer}>
+        <Text style={styles.fieldLabel}>Fecha (YYYY-MM-DD)</Text>
+        <TextInput
+          style={styles.input}
+          value={formData.fecha}
+          onChangeText={(text) => setFormData(prev => ({ ...prev, fecha: text }))}
+          placeholder="2025-09-25"
+        />
+
+        <Text style={styles.fieldLabel}>Hora (HH:MM)</Text>
+        <TextInput
+          style={styles.input}
+          value={formData.hora}
+          onChangeText={(text) => setFormData(prev => ({ ...prev, hora: text }))}
+          placeholder="20:00"
+        />
+
+        <Text style={styles.fieldLabel}>Cancha</Text>
+        <View style={styles.pickerContainer}>
+          {canchas.map(cancha => (
+            <TouchableOpacity
+              key={cancha.id}
+              style={[
+                styles.pickerOption,
+                formData.canchaId === cancha.id && styles.pickerSelected,
+                !cancha.disponible && styles.pickerDisabled
+              ]}
+              onPress={() => cancha.disponible && setFormData(prev => ({ ...prev, canchaId: cancha.id }))}
+              disabled={!cancha.disponible}
+            >
+              <Text style={[
+                styles.pickerText,
+                formData.canchaId === cancha.id && styles.pickerTextSelected,
+                !cancha.disponible && styles.pickerTextDisabled
+              ]}>
+                {cancha.nombre} {!cancha.disponible && '(No disponible)'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.fieldLabel}>Precio</Text>
+        <TextInput
+          style={styles.input}
+          value={formData.precio.toString()}
+          onChangeText={(text) => {
+            const num = parseInt(text, 10);
+            setFormData(prev => ({ 
+              ...prev, 
+              precio: isNaN(num) ? 0 : Math.max(0, num)
+            }));
+          }}
+          keyboardType="numeric"
+          placeholder="15000"
+        />
+
+        <Text style={styles.fieldLabel}>Jugadores máximos</Text>
+        <TextInput
+          style={styles.input}
+          value={formData.jugadoresMax.toString()}
+          onChangeText={(text) => {
+            const num = parseInt(text, 10);
+            setFormData(prev => ({ 
+              ...prev, 
+              jugadoresMax: isNaN(num) ? 10 : Math.max(1, Math.min(50, num))
+            }));
+          }}
+          keyboardType="numeric"
+          placeholder="10"
+        />
+
+        <Text style={styles.fieldLabel}>Descripción</Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          value={formData.descripcion}
+          onChangeText={(text) => setFormData(prev => ({ ...prev, descripcion: text }))}
+          placeholder="Descripción del partido (opcional)"
+          multiline
+          numberOfLines={3}
+        />
+      </ScrollView>
+    </View>
+  </Modal>
+));
+
+const CancheroScreen = () => {
+  const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+  const [canchas, setCanchas] = useState<Cancha[]>([]);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedPartido, setSelectedPartido] = useState<Match | null>(null);
+  const [activeTab, setActiveTab] = useState<'partidos' | 'crear'>('partidos');
+
+  // Hook para obtener partidos en tiempo real del canchero - SIEMPRE llamar hooks
+  const { matches: allPartidos, loading, error } = usePartidosCanchero(user?.uid || '');
+  
+  // Filtrar partidos solo si hay usuario logueado
+  const partidos = user ? allPartidos : [];
+
+  // Estados para formulario de creación/edición
+  const [formData, setFormData] = useState({
+    fecha: '',
+    hora: '',
+    canchaId: '',
+    precio: 0,
+    jugadoresMax: 10,
+    descripcion: ''
+  });
+
+  // Verificar autenticación
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!currentUser) {
+        Alert.alert('Acceso denegado', 'Debes iniciar sesión para acceder.');
+        router.replace('/login');
+        return;
+      }
+      setUser(currentUser);
+      loadCanchas();
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Cargar canchas del establecimiento
+  const loadCanchas = () => {
+    // Simular carga de canchas del establecimiento
+    // TODO: Reemplazar con llamada real a Firestore
+    const canchesSimuladas: Cancha[] = [
+      { id: '1', nombre: 'Cancha 1', establecimiento: 'Mi Establecimiento', disponible: true },
+      { id: '2', nombre: 'Cancha 2', establecimiento: 'Mi Establecimiento', disponible: true },
+      { id: '3', nombre: 'Cancha 3', establecimiento: 'Mi Establecimiento', disponible: false },
+    ];
+    setCanchas(canchesSimuladas);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      router.replace('/login');
+    } catch (error) {
+      Alert.alert('Error', 'Error al cerrar sesión');
+    }
+  };
+
+  // Función para resetear el formulario
+  const resetForm = useCallback(() => {
+    setFormData({
+      fecha: '',
+      hora: '',
+      canchaId: '',
+      precio: 0,
+      jugadoresMax: 10,
+      descripcion: ''
+    });
+  }, []);
+
+  const closeEditModal = useCallback(() => {
+    setShowEditModal(false);
+    setSelectedPartido(null);
+    resetForm();
+  }, [resetForm]);
+
+  const closeCreateModal = useCallback(() => {
+    setShowCreateModal(false);
+    resetForm();
+  }, [resetForm]);
+
+  const handleCreatePartido = useCallback(async () => {
+    console.log('🔥 handleCreatePartido llamado');
+    console.log('👤 Usuario actual:', user?.email);
+    console.log('📝 Datos del formulario:', formData);
+    
+    if (!user) {
+      console.log('❌ No hay usuario autenticado');
+      Alert.alert('Error', 'Debes estar autenticado');
+      return;
+    }
+
+    // Validaciones
+    if (!formData.fecha || !formData.hora || !formData.canchaId) {
+      console.log('❌ Faltan campos obligatorios:', {
+        fecha: formData.fecha,
+        hora: formData.hora,
+        canchaId: formData.canchaId
+      });
+      Alert.alert('Error', 'Por favor completa todos los campos obligatorios.');
+      return;
+    }
+
+    console.log('✅ Validaciones pasadas, creando partido...');
+
+    try {
+      // Verificar token de autenticación antes de proceder
+      console.log('🔑 Verificando autenticación del usuario...');
+      const token = await user.getIdToken(true); // Forzar refresh del token
+      console.log('✅ Token de autenticación verificado');
+      
+      // Crear fecha combinando fecha y hora
+      const [year, month, day] = formData.fecha.split('-');
+      const [hour, minute] = formData.hora.split(':');
+      const fechaCompleta = new Date(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day),
+        parseInt(hour),
+        parseInt(minute)
+      );
+
+      console.log('📅 Fecha creada:', fechaCompleta);
+
+      const canchaSeleccionada = canchas.find(c => c.id === formData.canchaId);
+      console.log('🏟️ Cancha seleccionada:', canchaSeleccionada);
+      
+      const matchData: Omit<Match, 'id' | 'createdAt' | 'updatedAt'> = {
+        fecha: Timestamp.fromDate(fechaCompleta),
+        canchaId: formData.canchaId,
+        cancheroId: user.uid,
+        estado: 'abierto',
+        jugadores: [],
+        nombreCancha: canchaSeleccionada?.nombre,
+        precio: formData.precio,
+        jugadoresMax: formData.jugadoresMax,
+        descripcion: formData.descripcion,
+      };
+
+      console.log('🔥 Datos del partido a crear:', matchData);
+      console.log('🔥 Llamando MatchService.crearPartido...');
+      const matchId = await MatchService.crearPartido(matchData);
+      console.log('✅ Partido creado con ID:', matchId);
+      
+      Alert.alert('Éxito', '¡Partido creado exitosamente! Ya está disponible para los jugadores.');
+      closeCreateModal();
+    } catch (error: any) {
+      console.error('❌ Error creando partido:', error);
+      
+      // Mostrar mensaje específico según el tipo de error
+      let errorMessage = 'No se pudo crear el partido';
+      if (error.message?.includes('permisos')) {
+        errorMessage = 'Error de permisos. Verifica tu autenticación.';
+      } else if (error.message?.includes('autenticación') || error.message?.includes('token')) {
+        errorMessage = 'Sesión expirada. Por favor, inicia sesión nuevamente.';
+      } else if (error.message?.includes('conexión')) {
+        errorMessage = 'Error de conexión. Verifica tu internet.';
+      }
+      
+      Alert.alert('Error', errorMessage);
+    }
+  }, [formData, canchas, user, closeCreateModal]);
+
+  const handleEditPartido = useCallback(async () => {
+    if (!selectedPartido || !user) {
+      Alert.alert('Error', 'No hay partido seleccionado para editar.');
+      return;
+    }
+
+    // Validaciones básicas
+    if (!formData.fecha || !formData.hora || !formData.canchaId) {
+      Alert.alert('Error', 'Por favor completa todos los campos obligatorios.');
+      return;
+    }
+
+    try {
+      // Crear fecha combinando fecha y hora
+      const [year, month, day] = formData.fecha.split('-');
+      const [hour, minute] = formData.hora.split(':');
+      const fechaCompleta = new Date(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day),
+        parseInt(hour),
+        parseInt(minute)
+      );
+
+      const canchaSeleccionada = canchas.find(c => c.id === formData.canchaId);
+      
+      const cambios: Partial<Match> = {
+        fecha: Timestamp.fromDate(fechaCompleta),
+        canchaId: formData.canchaId,
+        nombreCancha: canchaSeleccionada?.nombre,
+        precio: formData.precio,
+        jugadoresMax: formData.jugadoresMax,
+        descripcion: formData.descripcion,
+      };
+      
+      console.log('🔥 Actualizando partido en Firestore:', selectedPartido.id, cambios);
+      await MatchService.actualizarPartido(selectedPartido.id!, cambios);
+      
+      Alert.alert('Éxito', '¡Partido actualizado! Los cambios son visibles para todos los jugadores.');
+      closeEditModal();
+    } catch (error) {
+      console.error('❌ Error actualizando partido:', error);
+      Alert.alert('Error', 'Error al actualizar el partido.');
+    }
+  }, [selectedPartido, formData, canchas, user, closeEditModal]);
+
+  const handleDeletePartido = (partidoId: string) => {
+    Alert.alert(
+      'Confirmar eliminación',
+      '¿Estás seguro de que quieres eliminar este partido?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Eliminar', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await MatchService.eliminarPartido(partidoId);
+              Alert.alert('Éxito', 'Partido eliminado correctamente.');
+            } catch (error) {
+              Alert.alert('Error', 'No se pudo eliminar el partido.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const openEditModal = (partido: Match) => {
+    try {
+      console.log('Abriendo modal de edición para partido:', partido.id);
+      setSelectedPartido(partido);
+      
+      // Convertir fecha de Timestamp a formato YYYY-MM-DD
+      const fecha = partido.fecha.toDate();
+      const fechaFormateada = fecha.toISOString().split('T')[0];
+      const horaFormateada = fecha.toTimeString().split(' ')[0].substring(0, 5);
+      
+      // Encontrar la cancha correspondiente
+      const canchaCorrespondiente = canchas.find(c => c.nombre === partido.nombreCancha || c.id === partido.canchaId);
+      
+      const newFormData = {
+        fecha: fechaFormateada,
+        hora: horaFormateada,
+        canchaId: canchaCorrespondiente?.id || partido.canchaId,
+        precio: partido.precio || 0,
+        jugadoresMax: partido.jugadoresMax || 10,
+        descripcion: partido.descripcion || ''
+      };
+      
+      console.log('Datos del formulario a establecer:', newFormData);
+      setFormData(newFormData);
+      setShowEditModal(true);
+    } catch (error) {
+      console.error('Error al abrir modal de edición:', error);
+      Alert.alert('Error', 'Error al cargar los datos del partido para edición.');
+    }
+  };
+
+  const renderPartidoItem = ({ item }: { item: Match }) => {
+    const fecha = item.fecha.toDate();
+    const isOwner = user?.uid === item.cancheroId;
+
+    return (
+      <View style={styles.partidoCard}>
+        <View style={styles.partidoHeader}>
+          <Text style={styles.partidoFecha}>
+            {fecha.toLocaleDateString()} - {fecha.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+          {isOwner && (
+            <View style={styles.partidoActions}>
+              <TouchableOpacity onPress={() => openEditModal(item)} style={styles.actionButton}>
+                <Ionicons name="pencil" size={20} color="#007AFF" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleDeletePartido(item.id!)} style={styles.actionButton}>
+                <Ionicons name="trash" size={20} color="#FF3B30" />
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+        
+        <Text style={styles.partidoCancha}>{item.nombreCancha || item.canchaId}</Text>
+        
+        <View style={styles.partidoInfo}>
+          <View style={[styles.infoTag, item.estado === 'abierto' ? styles.abierto : styles.cerrado]}>
+            <Text style={styles.infoText}>{item.estado}</Text>
+          </View>
+          <View style={styles.infoTag}>
+            <Text style={styles.infoText}>{item.jugadores.length}/{item.jugadoresMax || 10} jugadores</Text>
+          </View>
+        </View>
+        
+        {item.precio && item.precio > 0 && (
+          <Text style={styles.partidoPrecio}>${item.precio.toLocaleString()}</Text>
+        )}
+        
+        {item.descripcion && <Text style={styles.partidoDesc}>{item.descripcion}</Text>}
+      </View>
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Cargando partidos...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>❌ {error}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>Dashboard Canchero</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            onPress={() => Alert.alert('Información del Canchero', `Email: ${user?.email}\nUID: ${user?.uid}\nTipo: Canchero\nEstado: Activo`)}
+            style={styles.infoButton}
+          >
+            <Ionicons name="information-circle" size={24} color="#007AFF" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleLogout}>
+            <Ionicons name="log-out" size={24} color="#FF3B30" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Tabs */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'partidos' && styles.activeTab]}
+          onPress={() => setActiveTab('partidos')}
+        >
+          <Text style={[styles.tabText, activeTab === 'partidos' && styles.activeTabText]}>
+            Mis Partidos ({partidos.length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'crear' && styles.activeTab]}
+          onPress={() => setActiveTab('crear')}
+        >
+          <Text style={[styles.tabText, activeTab === 'crear' && styles.activeTabText]}>
+            Crear Partido
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Content */}
+      {activeTab === 'partidos' ? (
+        <FlatList
+          data={partidos}
+          renderItem={renderPartidoItem}
+          keyExtractor={(item) => item.id!}
+          style={styles.partidosList}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No has creado ningún partido aún</Text>
+              <TouchableOpacity
+                style={styles.createFirstButton}
+                onPress={() => setActiveTab('crear')}
+              >
+                <Text style={styles.createFirstButtonText}>Crear tu primer partido</Text>
+              </TouchableOpacity>
+            </View>
+          }
+        />
+      ) : (
+        <View style={styles.createContainer}>
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => setShowCreateModal(true)}
+          >
+            <Ionicons name="add" size={24} color="#fff" />
+            <Text style={styles.createButtonText}>Crear Nuevo Partido</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Modals */}
+      <FormModal
+        visible={showCreateModal}
+        onClose={closeCreateModal}
+        onSubmit={handleCreatePartido}
+        title="Crear Partido"
+        formData={formData}
+        setFormData={setFormData}
+        canchas={canchas}
+      />
+
+      <FormModal
+        visible={showEditModal}
+        onClose={closeEditModal}
+        onSubmit={handleEditPartido}
+        title="Editar Partido"
+        formData={formData}
+        setFormData={setFormData}
+        canchas={canchas}
+      />
+    </View>
+  );
+};
+
+export default React.memo(CancheroScreen);
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  
+  // Header styles
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    paddingTop: 50, // Para el safe area
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+  },
+  infoButton: {
+    padding: 4,
+  },
+
+  // Tab styles
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    marginBottom: 10,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 15,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    borderBottomColor: '#007AFF',
+  },
+  tabText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  activeTabText: {
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+
+  // Partidos list styles
+  partidosList: {
+    flex: 1,
+    paddingHorizontal: 15,
+  },
+  partidoCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  partidoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  partidoFecha: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  partidoActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  actionButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#f8f8f8',
+  },
+  partidoCancha: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  partidoInfo: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  infoTag: {
+    backgroundColor: '#e3f2fd',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  privado: {
+    backgroundColor: '#fff3e0',
+  },
+  publico: {
+    backgroundColor: '#e8f5e8',
+  },
+  infoText: {
+    fontSize: 12,
+    color: '#333',
+    fontWeight: '500',
+  },
+  partidoPrecio: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 4,
+  },
+  partidoDesc: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+
+  // Create container styles
+  createContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 25,
+    gap: 10,
+  },
+  createButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    paddingTop: 50, // Para el safe area
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  cancelButton: {
+    fontSize: 16,
+    color: '#FF3B30',
+  },
+  saveButton: {
+    fontSize: 16,
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+
+  // Form styles
+  formContainer: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
+  fieldLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+    marginTop: 15,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 16,
+    backgroundColor: '#fff',
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  switchContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 15,
+    marginBottom: 5,
+  },
+
+  // Picker styles
+  pickerContainer: {
+    gap: 8,
+  },
+  pickerOption: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+  },
+  pickerSelected: {
+    borderColor: '#007AFF',
+    backgroundColor: '#e3f2fd',
+  },
+  pickerDisabled: {
+    backgroundColor: '#f5f5f5',
+    borderColor: '#ccc',
+  },
+  pickerText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  pickerTextSelected: {
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  pickerTextDisabled: {
+    color: '#999',
+  },
+
+  // Estados de partidos
+  abierto: {
+    backgroundColor: '#e8f5e8',
+  },
+  cerrado: {
+    backgroundColor: '#ffebee',
+  },
+
+  // Loading y error states
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF3B30',
+    textAlign: 'center',
+  },
+
+  // Empty state
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  createFirstButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  createFirstButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});

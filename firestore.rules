@@ -1,0 +1,13 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // REGLAS TEMPORALES PARA DESARROLLO - COMPLETAMENTE ABIERTAS
+    // TODO: Hacer más restrictivas en producción
+    
+    match /{document=**} {
+      // Permitir todas las operaciones - incluso sin autenticación para testing
+      allow read, write: if true;
+    }
+  }
+}
