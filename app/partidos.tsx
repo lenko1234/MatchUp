@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { Button } from 'react-native';
 import { 
   View, 
   Text, 
@@ -9,7 +10,8 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
-  RefreshControl
+  RefreshControl,
+  ImageBackground
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
@@ -18,12 +20,15 @@ import app from '../src/firebase';
 import { usePartidosAbiertos } from '../src/hooks/useMatches';
 import { MatchService } from '../src/services/MatchService';
 import { Match } from '../src/types/Match';
-
-const auth = getAuth(app);
-
-export default function Partidos() {
+export default function PartidosScreen() {
+  const auth = getAuth(app);
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedPartido, setSelectedPartido] = useState<Match | null>(null);
+  const [showTipoModal, setShowTipoModal] = useState(false);
+  const [tipoElegido, setTipoElegido] = useState<'masculino' | 'femenino' | 'mixto' | ''>('');
+  const [sexoJugador, setSexoJugador] = useState<string>('');
 
   // Verificar autenticación
   useEffect(() => {
@@ -50,7 +55,7 @@ export default function Partidos() {
 
     try {
       const isAlreadyJoined = partido.jugadores.some(jugador => jugador.uid === user.uid);
-      
+
       if (isAlreadyJoined) {
         // Salir del partido
         await MatchService.salirPartido(partido.id!, user.uid);
@@ -62,11 +67,56 @@ export default function Partidos() {
           return;
         }
 
-        // Unirse al partido
+        // Si es el primer jugador y no hay tipoPartido definido, mostrar modal
+        if (partido.jugadores.length === 0 && !partido.tipoPartido && !showTipoModal) {
+          // Obtener sexo del usuario desde Firestore antes de mostrar el modal
+          let sexo = '';
+          try {
+            const { getDoc, doc } = await import('firebase/firestore');
+            const profileDoc = await getDoc(doc(require('../src/firebase').db, 'users', user.uid));
+            if (profileDoc.exists()) {
+              const profileData = profileDoc.data();
+              sexo = profileData.sexo || '';
+            }
+          } catch (e) {}
+          setSexoJugador(sexo);
+          setSelectedPartido(partido);
+          setShowTipoModal(true);
+          return;
+        }
+
+        // Obtener perfil del usuario para incluir sexo
+        let sexo = '';
+        let username = '';
+        try {
+          const { getDoc, doc } = await import('firebase/firestore');
+          const profileDoc = await getDoc(doc(require('../src/firebase').db, 'users', user.uid));
+          if (profileDoc.exists()) {
+            const profileData = profileDoc.data();
+            sexo = profileData.sexo || '';
+            username = profileData.username || '';
+          }
+        } catch (e) {
+          // Si falla, sexo vacío
+        }
+
+        // Validar tipo de partido
+        if (partido.tipoPartido === 'masculino' && sexo !== 'hombre') {
+          Alert.alert('No puedes unirte a este partido, es solo para hombres');
+          return;
+        }
+        if (partido.tipoPartido === 'femenino' && sexo !== 'mujer') {
+          Alert.alert('No puedes unirte a este partido, es solo para mujeres');
+          return;
+        }
+        // Mixto permite ambos
+
         await MatchService.unirsePartido(partido.id!, {
           uid: user.uid,
           displayName: user.displayName || user.email || 'Usuario',
-          email: user.email || ''
+          email: user.email || '',
+          sexo,
+          username
         });
         Alert.alert('✅', 'Te has unido al partido');
       }
@@ -103,15 +153,35 @@ export default function Partidos() {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Partidos Disponibles</Text>
-        <TouchableOpacity onPress={handleLogout}>
-          <Ionicons name="log-out" size={24} color="#FF3B30" />
-        </TouchableOpacity>
-      </View>
-      
-      <View style={styles.buttonContainer}>
+    <ImageBackground source={require('../assets/images/Copilot_20250930_210440.png')} style={styles.background} resizeMode="cover">
+      <View style={styles.container}>
+
+      {/* Header superior blanco con texto y botones */}
+      {/* Header con fondo de césped */}
+      <ImageBackground source={require("../assets/cesped.png")} style={{ height: 60 }}>
+        <View style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.8)", // overlay semitransparente
+          justifyContent: "center",
+          alignItems: "center",
+          borderBottomWidth: 2,
+          borderBottomColor: "white",
+          flexDirection: "row",
+          paddingHorizontal: 16
+        }}>
+          <Text style={{ color: "white", fontSize: 20, flex: 1, textAlign: "center" }}>Partidos</Text>
+          <View style={styles.topBarButtons}>
+            <TouchableOpacity onPress={() => router.push('/infoJugador')} style={styles.topBarButton}>
+              <Ionicons name="person-circle" size={24} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleLogout} style={styles.topBarButton}>
+              <Ionicons name="log-out" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ImageBackground>
+
+  <View style={styles.buttonContainer}>
         <TouchableOpacity
           style={styles.switchRoleButton}
           onPress={() => router.push('/canchero')}
@@ -127,51 +197,59 @@ export default function Partidos() {
           renderItem={({ item }) => {
             const isJoined = item.jugadores.some(jugador => jugador.uid === user?.uid);
             const isFull = item.jugadores.length >= (item.jugadoresMax || 10);
-            
+
+            // Color según tipoPartido
+            let cardColor = '#fff';
+            if (item.tipoPartido === 'masculino') cardColor = '#cce8ff';
+            else if (item.tipoPartido === 'femenino') cardColor = '#ffd1e6';
+            else if (item.tipoPartido === 'mixto') cardColor = '#e0e0e0';
+
             return (
-              <View style={[styles.partidoCard, isJoined && styles.partidoJoined]}>
-                <View style={styles.partidoHeader}>
-                  <View style={styles.partidoContent}>
-                    <Text style={styles.partidoEstablecimiento}>{item.nombreEstablecimiento || 'Establecimiento'}</Text>
-                    <View style={styles.partidoDetails}>
-                      <Text style={styles.partidoCancha}>⚽ {item.nombreCancha || item.canchaId}</Text>
-                      <Text style={styles.partidoFecha}>
-                        📅 {item.fecha?.toDate?.()?.toLocaleDateString() || String(item.fecha)} • {item.hora}
-                      </Text>
-                      <View style={styles.partidoMeta}>
-                        <Text style={[styles.partidoJugadores, isJoined && styles.partidoInfoJoined]}>
-                          👥 {item.jugadores.length}/{item.jugadoresMax || 10}
+              <TouchableOpacity onPress={() => { setSelectedPartido(item); setModalVisible(true); }}>
+                <View style={[styles.partidoCard, isJoined && styles.partidoJoined, { backgroundColor: cardColor }]}> 
+                  <View style={styles.partidoHeader}>
+                    <View style={styles.partidoContent}>
+                      <Text style={styles.partidoEstablecimiento}>{item.nombreEstablecimiento || 'Establecimiento'}</Text>
+                      <View style={styles.partidoDetails}>
+                        <Text style={styles.partidoCancha}>⚽ {item.nombreCancha || item.canchaId}</Text>
+                        <Text style={styles.partidoFecha}>
+                          📅 {item.fecha?.toDate?.()?.toLocaleString?.('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) || String(item.fecha)}
                         </Text>
-                        {item.precio && item.precio > 0 && (
-                          <Text style={styles.partidoPrecio}>💰 ${item.precio.toLocaleString()}</Text>
-                        )}
-                        {item.requiresPassword && <Ionicons name="lock-closed" size={14} color="#666" />}
+                        <View style={styles.partidoMeta}>
+                          <Text style={[styles.partidoJugadores, isJoined && styles.partidoInfoJoined]}>
+                            👥 {item.jugadores.length}/{item.jugadoresMax || 10}
+                          </Text>
+                          {item.precio && item.precio > 0 && (
+                            <Text style={styles.partidoPrecio}>💰 ${item.precio.toLocaleString()}</Text>
+                          )}
+                          {item.requiresPassword && <Ionicons name="lock-closed" size={14} color="#666" />}
+                        </View>
                       </View>
                     </View>
+                    <TouchableOpacity
+                      style={[
+                        styles.joinButton,
+                        isJoined ? styles.leaveButton : styles.joinButtonActive,
+                        isFull && !isJoined && styles.disabledButton
+                      ]}
+                      onPress={() => handleJoinPartido(item)}
+                      disabled={isFull && !isJoined}
+                    >
+                      <Text style={[
+                        styles.joinButtonText,
+                        isJoined ? styles.leaveButtonText : styles.joinButtonActiveText
+                      ]}>
+                        {isJoined ? 'Salir' : isFull ? 'Lleno' : 'Unirse'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
-                  <TouchableOpacity
-                    style={[
-                      styles.joinButton,
-                      isJoined ? styles.leaveButton : styles.joinButtonActive,
-                      isFull && !isJoined && styles.disabledButton
-                    ]}
-                    onPress={() => handleJoinPartido(item)}
-                    disabled={isFull && !isJoined}
-                  >
-                    <Text style={[
-                      styles.joinButtonText,
-                      isJoined ? styles.leaveButtonText : styles.joinButtonActiveText
-                    ]}>
-                      {isJoined ? 'Salir' : isFull ? 'Lleno' : 'Unirse'}
-                    </Text>
-                  </TouchableOpacity>
+                  {isJoined && (
+                    <View style={styles.joinedIndicator}>
+                      <Text style={styles.joinedBadge}>✅ Unido</Text>
+                    </View>
+                  )}
                 </View>
-                {isJoined && (
-                  <View style={styles.joinedIndicator}>
-                    <Text style={styles.joinedBadge}>✅ Unido</Text>
-                  </View>
-                )}
-              </View>
+              </TouchableOpacity>
             );
           }}
         />
@@ -180,33 +258,162 @@ export default function Partidos() {
           <Text style={styles.emptyText}>⚽ No hay partidos disponibles</Text>
         </View>
       )}
+
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: '85%' }}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>Detalles del Partido</Text>
+            <Text style={{ marginBottom: 6 }}><Text style={{ fontWeight: 'bold' }}>Descripción:</Text> {selectedPartido?.descripcion || '-'}</Text>
+            <Text style={{ marginBottom: 6 }}><Text style={{ fontWeight: 'bold' }}>Sexo de los jugadores:</Text> {selectedPartido?.jugadores?.map(j => j.sexo || '-').join(', ')}</Text>
+            <Text style={{ marginBottom: 6 }}><Text style={{ fontWeight: 'bold' }}>Dirección:</Text> {selectedPartido?.direccion || selectedPartido?.ubicacion || '-'}</Text>
+            <Text style={{ marginBottom: 6 }}><Text style={{ fontWeight: 'bold' }}>Usuarios unidos:</Text> {selectedPartido?.jugadores?.map(j => j.displayName || j.username || j.email || '-').join(', ')}</Text>
+            <TouchableOpacity onPress={() => setModalVisible(false)} style={{ marginTop: 18, alignSelf: 'center', backgroundColor: '#007AFF', padding: 10, borderRadius: 8 }}>
+              <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal para elegir tipo de partido si es el primer jugador */}
+      <Modal
+        visible={showTipoModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowTipoModal(false)}
+      >
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: '85%' }}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>¿Qué tipo de partido será?</Text>
+            {/* Opciones según sexo del jugador */}
+            {sexoJugador === 'hombre' ? (
+              <React.Fragment>
+                <Button title="Masculino" onPress={async () => {
+                  setShowTipoModal(false);
+                  if (selectedPartido) {
+                    await MatchService.actualizarPartido(selectedPartido.id!, { tipoPartido: 'masculino' });
+                    setTipoElegido('masculino');
+                    handleJoinPartido({ ...selectedPartido, tipoPartido: 'masculino' });
+                  }
+                }} />
+                <Button title="Mixto" onPress={async () => {
+                  setShowTipoModal(false);
+                  if (selectedPartido) {
+                    await MatchService.actualizarPartido(selectedPartido.id!, { tipoPartido: 'mixto' });
+                    setTipoElegido('mixto');
+                    handleJoinPartido({ ...selectedPartido, tipoPartido: 'mixto' });
+                  }
+                }} />
+              </React.Fragment>
+            ) : sexoJugador === 'mujer' ? (
+              <React.Fragment>
+                <Button title="Femenino" onPress={async () => {
+                  setShowTipoModal(false);
+                  if (selectedPartido) {
+                    await MatchService.actualizarPartido(selectedPartido.id!, { tipoPartido: 'femenino' });
+                    setTipoElegido('femenino');
+                    handleJoinPartido({ ...selectedPartido, tipoPartido: 'femenino' });
+                  }
+                }} />
+                <Button title="Mixto" onPress={async () => {
+                  setShowTipoModal(false);
+                  if (selectedPartido) {
+                    await MatchService.actualizarPartido(selectedPartido.id!, { tipoPartido: 'mixto' });
+                    setTipoElegido('mixto');
+                    handleJoinPartido({ ...selectedPartido, tipoPartido: 'mixto' });
+                  }
+                }} />
+              </React.Fragment>
+            ) : (
+              <React.Fragment>
+                <Button title="Masculino" onPress={async () => {
+                  setShowTipoModal(false);
+                  if (selectedPartido) {
+                    await MatchService.actualizarPartido(selectedPartido.id!, { tipoPartido: 'masculino' });
+                    setTipoElegido('masculino');
+                    handleJoinPartido({ ...selectedPartido, tipoPartido: 'masculino' });
+                  }
+                }} />
+                <Button title="Femenino" onPress={async () => {
+                  setShowTipoModal(false);
+                  if (selectedPartido) {
+                    await MatchService.actualizarPartido(selectedPartido.id!, { tipoPartido: 'femenino' });
+                    setTipoElegido('femenino');
+                    handleJoinPartido({ ...selectedPartido, tipoPartido: 'femenino' });
+                  }
+                }} />
+                <Button title="Mixto" onPress={async () => {
+                  setShowTipoModal(false);
+                  if (selectedPartido) {
+                    await MatchService.actualizarPartido(selectedPartido.id!, { tipoPartido: 'mixto' });
+                    setTipoElegido('mixto');
+                    handleJoinPartido({ ...selectedPartido, tipoPartido: 'mixto' });
+                  }
+                }} />
+              </React.Fragment>
+            )}
+            <TouchableOpacity onPress={() => setShowTipoModal(false)} style={{ marginTop: 18, alignSelf: 'center', backgroundColor: '#007AFF', padding: 10, borderRadius: 8 }}>
+              <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
+    </ImageBackground>
   );
 }
 
+
 const styles = StyleSheet.create({
+  background: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  topBar: {
+    backgroundColor: '#121212',
+    paddingTop: 0,
+    paddingBottom: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#272729',
+    height: 64,
+    justifyContent: 'center',
+  },
+  topBarContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    maxWidth: 775,
+    marginLeft: 16,
+    marginRight: 16,
+    height: 64,
+  },
+  topBarTitle: {
+    color: '#e5e5e7',
+    fontSize: 22,
+    fontWeight: '500',
+    fontFamily: 'system-ui',
+  },
+  topBarButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+  },
+  topBarButton: {
+    padding: 4,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5'
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    paddingTop: 50,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    backgroundColor: 'transparent'
   },
   buttonContainer: {
     paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.9)',
   },
   switchRoleButton: {
     backgroundColor: '#1e90ff',
@@ -220,7 +427,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   partidoCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.95)',
     marginHorizontal: 16,
     marginVertical: 6,
     padding: 12,

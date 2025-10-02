@@ -54,6 +54,7 @@ export default function LoginJugador() {
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
   const [usuario, setUsuario] = useState('');
+  const [telefono, setTelefono] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -151,9 +152,9 @@ export default function LoginJugador() {
       fechaNacimiento: fechaNacimiento ? fechaNacimiento.toISOString() : 'NO SELECCIONADA'
     });
 
-    if (!email || !password || !gender || !nombre || !apellido || !usuario || !fechaNacimiento) {
+    if (!email || !password || !gender || !nombre || !apellido || !usuario || !telefono || !fechaNacimiento) {
       console.log('❌ Faltan campos obligatorios');
-      Alert.alert('Error', 'Por favor completa todos los campos, incluyendo nombre, apellido, usuario, fecha de nacimiento y género.');
+      Alert.alert('Error', 'Por favor completa todos los campos, incluyendo nombre, apellido, usuario, teléfono, fecha de nacimiento y género.');
       return;
     }
 
@@ -186,17 +187,33 @@ export default function LoginJugador() {
 
     try {
       console.log('Intentando registro con:', { email, password: '***', usuario });
-      
+
       // Crear el usuario en Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      
+
       // Guardar el mapping username-email localmente
       saveUsernameMapping(usuario, email);
-      
+
       // Actualizar el perfil en Firebase Auth con la información del usuario
       await updateProfile(userCredential.user, { 
         displayName: `${nombre} ${apellido}` 
       });
+
+      // Guardar datos extra en Firestore
+      try {
+        const { setDoc, doc } = await import('firebase/firestore');
+        await setDoc(doc(require('../src/firebase').db, 'users', userCredential.user.uid), {
+          username: usuario,
+          nombreCompleto: `${nombre} ${apellido}`,
+          sexo: gender,
+          telefono,
+          fechaNacimiento: fechaNacimiento ? fechaNacimiento.toISOString().split('T')[0] : '',
+          email,
+          createdAt: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.error('Error guardando datos extra en Firestore:', e);
+      }
 
       Alert.alert('¡Registro exitoso!', 'Ahora puedes iniciar sesión con tu email o username.');
       setIsRegister(false);
@@ -249,6 +266,17 @@ export default function LoginJugador() {
               placeholderTextColor="#888"
               value={usuario}
               onChangeText={setUsuario}
+              autoCapitalize="none"
+            />
+          )}
+          {isRegister && (
+            <TextInput
+              style={styles.input}
+              placeholder="Número de teléfono"
+              placeholderTextColor="#888"
+              value={telefono}
+              onChangeText={setTelefono}
+              keyboardType="phone-pad"
               autoCapitalize="none"
             />
           )}

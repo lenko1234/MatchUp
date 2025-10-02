@@ -181,7 +181,7 @@ export class MatchService {
   }
 
   // Métodos mejorados que manejan objetos completos de jugador
-  static async unirsePartido(matchId: string, jugador: { uid: string; displayName: string; email: string }): Promise<void> {
+  static async unirsePartido(matchId: string, jugador: { uid: string; displayName: string; email: string; sexo?: string; username?: string }): Promise<void> {
     try {
       console.log('🔄 Uniéndose al partido:', matchId, jugador);
       

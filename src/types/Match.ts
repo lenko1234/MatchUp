@@ -4,6 +4,8 @@ export interface Jugador {
   uid: string;
   displayName: string;
   email: string;
+  sexo?: string;
+  username?: string;
 }
 
 export interface Match {
@@ -13,8 +15,9 @@ export interface Match {
   cancheroId: string; // uid de Firebase Auth
   estado: 'abierto' | 'en_juego' | 'finalizado';
   jugadores: Jugador[]; // array de objetos jugador con información completa
-  
+
   // Campos adicionales opcionales
+  tipoPartido?: 'masculino' | 'femenino' | 'mixto'; // tipo de partido según el sexo del creador
   hora?: string; // formato HH:MM para UI
   nombreCancha?: string;
   nombreEstablecimiento?: string; // nombre del establecimiento del canchero
@@ -27,6 +30,8 @@ export interface Match {
   requiresPassword?: boolean; // indica si requiere contraseña
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+  direccion?: string;
+  ubicacion?: string;
 }
 
 export interface Cancha {

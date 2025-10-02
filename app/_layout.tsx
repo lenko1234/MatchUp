@@ -9,7 +9,7 @@ export default function RootLayout() {
     <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerTitleAlign: 'center' }}>
         <Stack.Screen name="index" options={{ title: 'Inicio' }} />
-        <Stack.Screen name="partidos" options={{ title: 'Partidos' }} />
+        <Stack.Screen name="partidos" options={{ headerShown: false }} />
         <Stack.Screen name="crear/index" options={{ title: 'Crear partido' }} />
         <Stack.Screen name="login" options={{ title: 'Seleccionar Tipo' }} />
         <Stack.Screen name="loginJugador" options={{ title: 'Login Jugador' }} />
