@@ -1,15 +1,28 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+# Learn more: https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
-# dependencies
+####################
+# Dependencies
+####################
 node_modules/
+yarn.lock
+package-lock.json
+.pnpm-store/
 
+####################
 # Expo
+####################
 .expo/
+.expo-shared/
 dist/
 web-build/
 expo-env.d.ts
 
-# Native
+####################
+# React Native / Native builds
+####################
+android/build/
+ios/build/
+ios/Pods/
 .kotlin/
 *.orig.*
 *.jks
@@ -18,22 +31,48 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
-# Metro
+####################
+# Metro / Bundler
+####################
 .metro-health-check*
+.expo-cache/
 
-# debug
+####################
+# Debug / logs
+####################
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+*.log
 
-# macOS
+####################
+# macOS / system files
+####################
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+####################
+# Local environment
+####################
+.env
+.env.*
+.env.local
 
-# typescript
+####################
+# TypeScript
+####################
 *.tsbuildinfo
 
-app-example
+####################
+# Editors / IDEs
+####################
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+####################
+# Example / template apps
+####################
+app-example/
+
