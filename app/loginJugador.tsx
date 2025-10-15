@@ -58,6 +58,8 @@ export default function LoginJugador() {
   const [fechaNacimiento, setFechaNacimiento] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [usernameError, setUsernameError] = useState(false);
   const router = useRouter();
 
   // Modo de prueba temporal para evitar problemas de Firestore
@@ -179,7 +181,8 @@ export default function LoginJugador() {
     const existingEmail = getEmailByUsername(usuario);
     if (existingEmail) {
       console.log('❌ Username ya existe');
-      Alert.alert('Error', 'Este nombre de usuario ya está en uso. Por favor elige otro.');
+      setErrorMessage('Este nombre de usuario ya está en uso. Por favor elige otro.');
+      setUsernameError(true);
       return;
     }
 
@@ -261,14 +264,21 @@ export default function LoginJugador() {
           )}
           {isRegister && (
             <TextInput
-              style={styles.input}
+              style={[styles.input, usernameError && styles.inputError]}
               placeholder="Usuario"
               placeholderTextColor="#888"
               value={usuario}
-              onChangeText={setUsuario}
+              onChangeText={(text) => {
+                setUsuario(text);
+                if (usernameError) {
+                  setUsernameError(false);
+                  setErrorMessage('');
+                }
+              }}
               autoCapitalize="none"
             />
           )}
+          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
           {isRegister && (
             <TextInput
               style={styles.input}
@@ -596,5 +606,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  inputError: {
+    borderColor: '#ff4444',
+    borderWidth: 2,
+  },
+  errorText: {
+    color: '#ff4444',
+    fontSize: 14,
+    textAlign: 'center',
+    marginVertical: 10,
+    backgroundColor: '#ffe6e6',
+    padding: 8,
+    borderRadius: 8,
   },
 });

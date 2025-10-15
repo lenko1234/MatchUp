@@ -55,6 +55,7 @@ export default function LoginCanchero() {
   const [nombreCancha, setNombreCancha] = useState('');
   const [direccion, setDireccion] = useState('');
   const [telefono, setTelefono] = useState('');
+  const [numeroCanchas, setNumeroCanchas] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
 
@@ -155,6 +156,12 @@ export default function LoginCanchero() {
     console.log('✅ Todos los campos están completos');
 
     // Validaciones adicionales
+    if (numeroCanchas < 1 || numeroCanchas > 10) {
+      console.log('❌ Número de canchas inválido');
+      Alert.alert('Error', 'El número de canchas debe estar entre 1 y 10.');
+      return;
+    }
+
     if (password.length < 6) {
       console.log('❌ Contraseña muy corta');
       Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres.');
@@ -195,13 +202,16 @@ export default function LoginCanchero() {
       // Crear establishment automáticamente
       console.log('Creando establishment automáticamente...');
       try {
+        // Generar array de canchas
+        const canchasArray = Array.from({length: numeroCanchas}, (_, i) => `Cancha ${i + 1}`);
+        
         await addDoc(collection(db, 'establishments'), {
           ownerId: userCredential.user.uid,
           nombre: nombreCancha,
           direccion: direccion,
           telefono: telefono,
           descripcion: `Establecimiento de ${nombre} ${apellido}`,
-          canchas: [],
+          canchas: canchasArray,
           createdAt: new Date(),
           ownerName: `${nombre} ${apellido}`,
           ownerEmail: email
@@ -295,6 +305,31 @@ export default function LoginCanchero() {
               onChangeText={setTelefono}
               keyboardType="phone-pad"
             />
+          )}
+          {isRegister && (
+            <View style={styles.canchasSelector}>
+              <Text style={styles.canchasSelectorLabel}>Número de canchas:</Text>
+              <View style={styles.canchasNumberContainer}>
+                <TouchableOpacity 
+                  style={styles.numberButton}
+                  onPress={() => setNumeroCanchas(Math.max(1, numeroCanchas - 1))}
+                >
+                  <Text style={styles.numberButtonText}>-</Text>
+                </TouchableOpacity>
+                
+                <Text style={styles.numberDisplay}>{numeroCanchas}</Text>
+                
+                <TouchableOpacity 
+                  style={styles.numberButton}
+                  onPress={() => setNumeroCanchas(Math.min(10, numeroCanchas + 1))}
+                >
+                  <Text style={styles.numberButtonText}>+</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.canchasPreview}>
+                Se crearán: {Array.from({length: numeroCanchas}, (_, i) => `Cancha ${i + 1}`).join(', ')}
+              </Text>
+            </View>
           )}
           <TextInput
             style={styles.input}
@@ -420,5 +455,54 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     fontSize: 16,
     textDecorationLine: 'underline',
+  },
+  
+  // Estilos para selector de canchas
+  canchasSelector: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    width: '100%',
+    alignItems: 'center',
+  },
+  canchasSelectorLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  canchasNumberContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  numberButton: {
+    backgroundColor: '#007AFF',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 15,
+  },
+  numberButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  numberDisplay: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    minWidth: 30,
+    textAlign: 'center',
+  },
+  canchasPreview: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });

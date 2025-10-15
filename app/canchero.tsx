@@ -110,52 +110,28 @@ const FormModal = React.memo(({
         <Text style={styles.fieldLabel}>Hora del Partido</Text>
         {Platform.OS === 'web' ? (
           <View style={styles.pickerContainer}>
-            <View style={styles.timePickerRow}>
-              <select
-                value={formData.hora.getHours()}
-                onChange={(e) => {
-                  const newHour = parseInt(e.target.value);
-                  const selectedTime = new Date(2000, 0, 1, newHour, formData.hora.getMinutes());
-                  onTimeChange(null, selectedTime);
-                }}
-                style={{
-                  padding: 15,
-                  fontSize: 16,
-                  borderRadius: 8,
-                  border: '1px solid #ddd',
-                  backgroundColor: '#f9f9f9',
-                  flex: 1,
-                  marginRight: 10
-                }}
-              >
-                {Array.from({length: 24}, (_, i) => (
-                  <option key={i} value={i}>
-                    {i.toString().padStart(2, '0')}:00
-                  </option>
-                ))}
-              </select>
-              <select
-                value={formData.hora.getMinutes()}
-                onChange={(e) => {
-                  const newMinutes = parseInt(e.target.value);
-                  const selectedTime = new Date(2000, 0, 1, formData.hora.getHours(), newMinutes);
-                  onTimeChange(null, selectedTime);
-                }}
-                style={{
-                  padding: 15,
-                  fontSize: 16,
-                  borderRadius: 8,
-                  border: '1px solid #ddd',
-                  backgroundColor: '#f9f9f9',
-                  flex: 1
-                }}
-              >
-                <option value={0}>00</option>
-                <option value={15}>15</option>
-                <option value={30}>30</option>
-                <option value={45}>45</option>
-              </select>
-            </View>
+            <select
+              value={formData.hora.getHours()}
+              onChange={(e) => {
+                const newHour = parseInt(e.target.value);
+                const selectedTime = new Date(2000, 0, 1, newHour, 0); // Siempre minutos = 0
+                onTimeChange(null, selectedTime);
+              }}
+              style={{
+                padding: 15,
+                fontSize: 16,
+                borderRadius: 8,
+                border: '1px solid #ddd',
+                backgroundColor: '#f9f9f9',
+                width: '100%'
+              }}
+            >
+              {Array.from({length: 16}, (_, i) => i + 8).map(hour => ( // Solo de 8 a 23
+                <option key={hour} value={hour}>
+                  {hour.toString().padStart(2, '0')}:00
+                </option>
+              ))}
+            </select>
           </View>
         ) : (
           <DateTimePicker
@@ -164,14 +140,18 @@ const FormModal = React.memo(({
             display={Platform.OS === 'ios' ? 'compact' : 'default'}
             onChange={(event, selectedTime) => {
               if (selectedTime) {
-                // Redondear a los 15 minutos más cercanos
+                // Redondear a la hora más cercana (sin minutos)
+                const hours = selectedTime.getHours();
                 const minutes = selectedTime.getMinutes();
-                const roundedMinutes = Math.round(minutes / 15) * 15;
                 const adjustedTime = new Date(selectedTime);
-                adjustedTime.setMinutes(roundedMinutes % 60);
-                if (roundedMinutes >= 60) {
-                  adjustedTime.setHours(adjustedTime.getHours() + 1);
+                
+                // Si los minutos son >= 30, redondear a la siguiente hora
+                if (minutes >= 30) {
+                  adjustedTime.setHours(hours + 1);
                 }
+                adjustedTime.setMinutes(0); // Siempre en punto
+                adjustedTime.setSeconds(0);
+                
                 onTimeChange(event, adjustedTime);
               }
             }}
@@ -419,9 +399,14 @@ const CancheroScreen = () => {
 
   // Función para resetear el formulario
   const resetForm = useCallback(() => {
+    const horaEnPunto = new Date();
+    horaEnPunto.setMinutes(0);
+    horaEnPunto.setSeconds(0);
+    horaEnPunto.setMilliseconds(0);
+    
     setFormData({
       fecha: new Date(),
-      hora: new Date(),
+      hora: horaEnPunto,
       canchaId: '',
       precio: 0,
       jugadoresMax: 10,
@@ -1112,9 +1097,5 @@ const styles = StyleSheet.create({
   },
   picker: {
     marginVertical: 10,
-  },
-  timePickerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
 });

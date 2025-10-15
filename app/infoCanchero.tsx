@@ -38,6 +38,11 @@ export default function CancheroInfo() {
     horarios: 'Lun-Dom 08:00 - 23:00'
   });
 
+  // Estado para las canchas
+  const [canchas, setCanchas] = useState<string[]>(['Cancha 1']);
+  const [showCanchasModal, setShowCanchasModal] = useState(false);
+  const [numeroCanchas, setNumeroCanchas] = useState(1);
+
   // Funciones para persistencia de datos en Firestore (compartida entre dispositivos)
   const saveEstablishmentData = async (data: any) => {
     if (!user?.uid) return;
@@ -63,6 +68,7 @@ export default function CancheroInfo() {
           direccion: data.direccion,
           telefono: data.telefono,
           horarios: data.horarios,
+          canchas: data.canchas || [],
           updatedAt: new Date()
         });
         console.log('✅ Establishment actualizado en Firestore');
@@ -75,7 +81,7 @@ export default function CancheroInfo() {
           telefono: data.telefono,
           horarios: data.horarios,
           descripcion: `Establecimiento de ${user.displayName || user.email}`,
-          canchas: [],
+          canchas: data.canchas || [],
           createdAt: new Date(),
           updatedAt: new Date(),
           ownerEmail: user.email
@@ -113,6 +119,11 @@ export default function CancheroInfo() {
           telefono: data.telefono || '+54 11 1234-5678',
           horarios: data.horarios || 'Lun-Dom 08:00 - 23:00'
         });
+        
+        // Cargar canchas
+        const canchasData = data.canchas || ['Cancha 1'];
+        setCanchas(canchasData);
+        setNumeroCanchas(canchasData.length);
       } else {
         console.log('📝 No hay establishment para este usuario, usando valores por defecto');
       }
@@ -173,7 +184,8 @@ export default function CancheroInfo() {
     if (editValue.trim()) {
       const newData = {
         ...establishmentInfo,
-        [editingField]: editValue.trim()
+        [editingField]: editValue.trim(),
+        canchas: canchas
       };
       setEstablishmentInfo(newData);
       await saveEstablishmentData(newData);
@@ -219,6 +231,25 @@ export default function CancheroInfo() {
     setShowEditModal(false);
     setEditingField('');
     setEditValue('');
+  };
+
+  // Funciones para gestionar canchas
+  const handleUpdateCanchas = async () => {
+    const nuevasCanchas = Array.from({length: numeroCanchas}, (_, i) => `Cancha ${i + 1}`);
+    setCanchas(nuevasCanchas);
+    
+    // Guardar en Firestore
+    await saveEstablishmentData({
+      ...establishmentInfo,
+      canchas: nuevasCanchas
+    });
+    
+    setShowCanchasModal(false);
+  };
+
+  const handleCanchasModalCancel = () => {
+    setNumeroCanchas(canchas.length); // Resetear al valor actual
+    setShowCanchasModal(false);
   };
 
   // Calcular estadísticas
@@ -321,22 +352,29 @@ export default function CancheroInfo() {
           <View style={styles.sectionHeader}>
             <Ionicons name="football" size={24} color="#007AFF" />
             <Text style={styles.sectionTitle}>Canchas Disponibles</Text>
+            <TouchableOpacity 
+              style={styles.editCanchasButton}
+              onPress={() => setShowCanchasModal(true)}
+            >
+              <Text style={styles.editCanchasText}>Editar</Text>
+            </TouchableOpacity>
           </View>
           
           <View style={styles.canchasContainer}>
-            {['Cancha 1', 'Cancha 2', 'Cancha 3'].map((cancha, index) => (
+            {canchas.map((cancha, index) => (
               <View key={index} style={styles.canchaCard}>
                 <View style={styles.canchaInfo}>
                   <Text style={styles.canchaName}>{cancha}</Text>
                   <Text style={styles.canchaType}>Fútbol 5</Text>
                 </View>
-                <View style={[styles.canchaStatus, index === 2 && styles.canchaUnavailable]}>
-                  <Text style={[styles.canchaStatusText, index === 2 && styles.canchaUnavailableText]}>
-                    {index === 2 ? 'No disponible' : 'Disponible'}
-                  </Text>
+                <View style={styles.canchaStatus}>
+                  <Text style={styles.canchaStatusText}>Disponible</Text>
                 </View>
               </View>
             ))}
+            {canchas.length === 0 && (
+              <Text style={styles.noCanchasText}>No hay canchas configuradas</Text>
+            )}
           </View>
         </View>
 
@@ -445,6 +483,54 @@ export default function CancheroInfo() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal de Gestión de Canchas */}
+      <Modal
+        visible={showCanchasModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCanchasModalCancel}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Gestionar Canchas</Text>
+            
+            <Text style={styles.modalSubtitle}>¿Cuántas canchas tiene tu establecimiento?</Text>
+            
+            <View style={styles.canchasNumberContainer}>
+              <TouchableOpacity 
+                style={styles.numberButton}
+                onPress={() => setNumeroCanchas(Math.max(1, numeroCanchas - 1))}
+              >
+                <Text style={styles.numberButtonText}>-</Text>
+              </TouchableOpacity>
+              
+              <Text style={styles.numberDisplay}>{numeroCanchas}</Text>
+              
+              <TouchableOpacity 
+                style={styles.numberButton}
+                onPress={() => setNumeroCanchas(Math.min(10, numeroCanchas + 1))}
+              >
+                <Text style={styles.numberButtonText}>+</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={styles.canchasPreview}>
+              Se crearán: {Array.from({length: numeroCanchas}, (_, i) => `Cancha ${i + 1}`).join(', ')}
+            </Text>
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalCancelButton} onPress={handleCanchasModalCancel}>
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.modalSaveButton} onPress={handleUpdateCanchas}>
+                <Text style={styles.modalSaveText}>Guardar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -472,6 +558,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 12,
     gap: 8,
   },
@@ -573,6 +660,65 @@ const styles = StyleSheet.create({
   },
   canchaUnavailableText: {
     color: '#f44336',
+  },
+  editCanchasButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  editCanchasText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  noCanchasText: {
+    textAlign: 'center',
+    color: '#666',
+    fontStyle: 'italic',
+    padding: 20,
+  },
+  
+  // Modal de canchas
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  canchasNumberContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  numberButton: {
+    backgroundColor: '#007AFF',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 20,
+  },
+  numberButtonText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  numberDisplay: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+    minWidth: 30,
+    textAlign: 'center',
+  },
+  canchasPreview: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+    fontStyle: 'italic',
   },
   
   // Stats
