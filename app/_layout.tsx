@@ -16,7 +16,7 @@ export default function RootLayout() {
         <Stack.Screen name="loginCanchero" options={{ title: 'Login Canchero' }} />
         <Stack.Screen name="jugador" options={{ title: 'Jugador' }} />
         <Stack.Screen name="canchero" options={{ title: 'Canchero' }} />
-        <Stack.Screen name="info" options={{ title: 'Información del Canchero' }} />
+        <Stack.Screen name="infoCanchero" options={{ title: 'Información del Canchero' }} />
       </Stack>
     </ThemeProvider>
   );

@@ -332,7 +332,7 @@ const CancheroScreen = () => {
       headerRight: () => (
         <View style={styles.headerRightButtons}>
           <TouchableOpacity 
-            onPress={() => router.navigate('/info' as any)}
+            onPress={() => router.navigate('/infoCanchero' as any)}
             style={styles.headerButton}
           >
             <Ionicons name="information-circle" size={24} color="#007AFF" />
@@ -351,7 +351,7 @@ const CancheroScreen = () => {
     updateTitle();
   }, [navigation, user?.uid, getEstablishmentData]);
 
-  // Actualizar título cuando regrese a esta pantalla (desde /info)
+  // Actualizar título cuando regrese a esta pantalla (desde /infoCanchero)
   useFocusEffect(
     useCallback(() => {
       const updateTitleOnFocus = async () => {

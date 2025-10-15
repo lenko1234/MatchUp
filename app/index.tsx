@@ -12,7 +12,7 @@ export default function HomeScreen() {
         resizeMode="contain"
         accessibilityLabel="Logo de la app: triángulo blanco con fondo negro"
       />
-      <Text style={styles.title}>Bienvenido a MatchApp</Text>
+      <Text style={styles.title}>MatchUp</Text>
       <Text style={styles.subtitle}>Facilita el armado de partidos de fútbol</Text>
       <Text style={styles.info}>Seleccioná tu rol para comenzar</Text>
       <TouchableOpacity style={styles.button} onPress={() => router.push('/login')}>

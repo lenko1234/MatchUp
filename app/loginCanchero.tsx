@@ -3,8 +3,8 @@ import { View, Text, TextInput, Button, StyleSheet, Alert, TouchableOpacity, Scr
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-// import { doc, setDoc, getDoc, query, collection, where, getDocs } from 'firebase/firestore'; // COMENTADO: Causaba errores WebChannel
-import { auth } from '../src/firebase';
+import { doc, setDoc, addDoc, collection } from 'firebase/firestore';
+import { auth, db } from '../src/firebase';
 
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
@@ -191,6 +191,26 @@ export default function LoginCanchero() {
       await updateProfile(userCredential.user, { 
         displayName: `${nombre} ${apellido} - ${nombreCancha}` 
       });
+
+      // Crear establishment automáticamente
+      console.log('Creando establishment automáticamente...');
+      try {
+        await addDoc(collection(db, 'establishments'), {
+          ownerId: userCredential.user.uid,
+          nombre: nombreCancha,
+          direccion: direccion,
+          telefono: telefono,
+          descripcion: `Establecimiento de ${nombre} ${apellido}`,
+          canchas: [],
+          createdAt: new Date(),
+          ownerName: `${nombre} ${apellido}`,
+          ownerEmail: email
+        });
+        console.log('✅ Establishment creado exitosamente');
+      } catch (establishmentError) {
+        console.error('Error creando establishment:', establishmentError);
+        // No fallar el registro por esto, solo log
+      }
 
       Alert.alert('¡Registro exitoso! Ahora puedes iniciar sesión con tu email o usuario.');
       setIsRegister(false);

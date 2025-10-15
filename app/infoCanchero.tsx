@@ -14,7 +14,7 @@ import {
 import { useRouter, useNavigation } from 'expo-router';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db } from '../src/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import app from '../src/firebase';
 import { usePartidosCanchero } from '../src/hooks/useMatches';
@@ -43,21 +43,46 @@ export default function CancheroInfo() {
     if (!user?.uid) return;
     
     try {
-      console.log(`💾 Guardando datos del establecimiento en Firestore:`, data);
+      console.log(`💾 Guardando datos del establishment en Firestore:`, data);
       
       // Importar Firestore functions dinámicamente
-      const { doc, setDoc } = await import('firebase/firestore');
+      const { collection, query, where, getDocs, doc, updateDoc, addDoc } = await import('firebase/firestore');
       const { db } = await import('../src/firebase');
       
-      // Guardar en Firestore en una colección 'establishments'
-      const establishmentRef = doc(db, 'establishments', user.uid);
-      await setDoc(establishmentRef, {
-        ...data,
-        updatedAt: new Date(),
-        userId: user.uid
-      }, { merge: true });
+      // Buscar establishment existente por ownerId
+      const establishmentsRef = collection(db, 'establishments');
+      const q = query(establishmentsRef, where('ownerId', '==', user.uid));
+      const querySnapshot = await getDocs(q);
       
-      console.log('✅ Datos guardados en Firestore');
+      if (!querySnapshot.empty) {
+        // Actualizar establishment existente
+        const establishmentDoc = querySnapshot.docs[0];
+        const establishmentRef = doc(db, 'establishments', establishmentDoc.id);
+        await updateDoc(establishmentRef, {
+          nombre: data.nombre,
+          direccion: data.direccion,
+          telefono: data.telefono,
+          horarios: data.horarios,
+          updatedAt: new Date()
+        });
+        console.log('✅ Establishment actualizado en Firestore');
+      } else {
+        // Crear nuevo establishment (caso legacy)
+        await addDoc(establishmentsRef, {
+          ownerId: user.uid,
+          nombre: data.nombre,
+          direccion: data.direccion,
+          telefono: data.telefono,
+          horarios: data.horarios,
+          descripcion: `Establecimiento de ${user.displayName || user.email}`,
+          canchas: [],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          ownerEmail: user.email
+        });
+        console.log('✅ Nuevo establishment creado en Firestore (caso legacy)');
+      }
+      
     } catch (error) {
       console.error('❌ Error saving establishment data to Firestore:', error);
     }
@@ -67,17 +92,19 @@ export default function CancheroInfo() {
     if (!user?.uid) return;
     
     try {
-      console.log(`📖 Cargando datos del establecimiento desde Firestore`);
+      console.log(`📖 Cargando datos del establishment desde Firestore`);
       
       // Importar Firestore functions dinámicamente
-      const { doc, getDoc } = await import('firebase/firestore');
+      const { collection, query, where, getDocs } = await import('firebase/firestore');
       const { db } = await import('../src/firebase');
       
-      // Obtener de Firestore
-      const establishmentRef = doc(db, 'establishments', user.uid);
-      const establishmentDoc = await getDoc(establishmentRef);
+      // Buscar establishment por ownerId
+      const establishmentsRef = collection(db, 'establishments');
+      const q = query(establishmentsRef, where('ownerId', '==', user.uid));
+      const querySnapshot = await getDocs(q);
       
-      if (establishmentDoc.exists()) {
+      if (!querySnapshot.empty) {
+        const establishmentDoc = querySnapshot.docs[0];
         const data = establishmentDoc.data();
         console.log('✅ Datos cargados desde Firestore:', data);
         setEstablishmentInfo({
@@ -87,7 +114,7 @@ export default function CancheroInfo() {
           horarios: data.horarios || 'Lun-Dom 08:00 - 23:00'
         });
       } else {
-        console.log('📝 No hay datos del establecimiento, usando valores por defecto');
+        console.log('📝 No hay establishment para este usuario, usando valores por defecto');
       }
     } catch (error) {
       console.error('❌ Error loading establishment data from Firestore:', error);
@@ -129,30 +156,6 @@ export default function CancheroInfo() {
     const initializeData = async () => {
       if (user?.uid) {
         await loadEstablishmentData();
-        
-        // Si no hay datos guardados, guardar los valores por defecto
-        try {
-          const key = `establishment_${user.uid}`;
-          let saved = null;
-          
-          // Load from Firestore
-          const establishmentDoc = await getDoc(doc(db, 'establishments', user.uid));
-          if (establishmentDoc.exists()) {
-            const data = establishmentDoc.data();
-            saved = JSON.stringify({
-              establishmentName: data.establishmentName || '',
-              ownerName: data.ownerName || '',
-              direccion: data.direccion || '',
-              telefono: data.telefono || '',
-              email: data.email || ''
-            });
-          }
-          
-          // No guardar datos por defecto automáticamente
-          // El usuario debe editar manualmente para guardar
-        } catch (error) {
-          console.error('Error initializing establishment data:', error);
-        }
       }
     };
 

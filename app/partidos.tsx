@@ -200,8 +200,8 @@ export default function PartidosScreen() {
 
             // Color según tipoPartido
             let cardColor = '#fff';
-            if (item.tipoPartido === 'masculino') cardColor = '#cce8ff';
-            else if (item.tipoPartido === 'femenino') cardColor = '#ffd1e6';
+            if (item.tipoPartido === 'masculino') cardColor = '#b3d9ff';
+            else if (item.tipoPartido === 'femenino') cardColor = '#ffb3d9';
             else if (item.tipoPartido === 'mixto') cardColor = '#e0e0e0';
 
             return (
@@ -443,13 +443,13 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   partidoEstablecimiento: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#007AFF',
     marginBottom: 4,
   },
   partidoCancha: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '600',
     color: '#555',
     marginBottom: 2,
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   partidoFecha: {
-    fontSize: 13,
+    fontSize: 15,
     color: '#555',
     marginBottom: 4,
   },
@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   partidoJugadores: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#666',
   },
   partidoInfo: {
@@ -518,7 +518,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   partidoPrecio: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
     color: '#4CAF50',
   },
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
   },
   joinButton: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 20,
     borderRadius: 16,
     minWidth: 60,
     alignItems: 'center',
